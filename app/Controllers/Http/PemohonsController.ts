@@ -180,7 +180,7 @@ export default class PemohonsController {
   public async destroy({ params, response }: HttpContextContract) {
     const pemohon = await Pemohon.findByOrFail('nik', params.nik)
     try {
-      await Drive.delete(pemohon.kk)
+      if (pemohon.kk !=null) await Drive.delete(pemohon.kk)
       await pemohon.delete()
       return response.status(200)
     } catch (error) {
