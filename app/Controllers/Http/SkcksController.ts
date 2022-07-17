@@ -16,15 +16,15 @@ export default class SkcksController {
 
     let sql = `SELECT skcks.*, pemohons.nik, pemohons.nama FROM skcks
       JOIN pemohons on skcks.pemohon_nik = pemohons.nik
-      WHERE 'nama' like '%${search}%' `
+      WHERE nama like '%${search}%' `
     sql +=
       filterType == 1
         ? `AND date(skcks.created_at) = '${filter}' `
         : filterType == 2
-        ? `AND extract(month from skcks.created_at) = ${filter} `
-        : filterType == 3
-        ? `AND extract(year from skcks.created_at) = ${filter} `
-        : ''
+          ? `AND extract(month from skcks.created_at) = ${filter} `
+          : filterType == 3
+            ? `AND extract(year from skcks.created_at) = ${filter} `
+            : ''
     const total = await Database.rawQuery(sql)
     sql += `ORDER BY skcks.id DESC LIMIT ${perPage} OFFSET ${parseInt(pageInput) * perPage}`
     const skcks = await Database.rawQuery(sql)

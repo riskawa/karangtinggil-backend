@@ -15,18 +15,17 @@ export default class SkusController {
 
     let sql = `SELECT skus.*, pemohons.nik, pemohons.nama FROM skus
       JOIN pemohons on skus.pemohon_nik = pemohons.nik
-      WHERE 'nama' like '%${search}%' `
+      WHERE nama like '%${search}%' `
     sql +=
       filterType == 1
         ? `AND date(skus.created_at) = '${filter}' `
         : filterType == 2
-        ? `AND extract(month from skus.created_at) = ${filter} `
-        : filterType == 3
-        ? `AND extract(year from skus.created_at) = ${filter} `
-        : ''
+          ? `AND extract(month from skus.created_at) = ${filter} `
+          : filterType == 3
+            ? `AND extract(year from skus.created_at) = ${filter} `
+            : ''
     const total = await Database.rawQuery(sql)
     sql += `ORDER BY skus.id DESC LIMIT ${perPage} OFFSET ${parseInt(pageInput) * perPage}`
-    console.log(sql)
     const skus = await Database.rawQuery(sql)
     const current_page = parseInt(pageInput) + 1
     const last_page = Math.ceil(total.rowCount / perPage)

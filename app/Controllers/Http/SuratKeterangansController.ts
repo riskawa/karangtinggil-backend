@@ -15,20 +15,18 @@ export default class SuratKeterangansController {
 
     let sql = `SELECT surat_keterangans.*, pemohons.nik, pemohons.nama FROM surat_keterangans
       JOIN pemohons on surat_keterangans.pemohon_nik = pemohons.nik
-      WHERE 'nama' like '%${search}%' `
+      WHERE nama like '%${search}%' `
     sql +=
       filterType == 1
         ? `AND date(surat_keterangans.created_at) = '${filter}' `
         : filterType == 2
-        ? `AND extract(month from surat_keterangans.created_at) = ${filter} `
-        : filterType == 3
-        ? `AND extract(year from surat_keterangans.created_at) = ${filter} `
-        : ''
+          ? `AND extract(month from surat_keterangans.created_at) = ${filter} `
+          : filterType == 3
+            ? `AND extract(year from surat_keterangans.created_at) = ${filter} `
+            : ''
     const total = await Database.rawQuery(sql)
-    sql += `ORDER BY surat_keterangans.id DESC LIMIT ${perPage} OFFSET ${
-      parseInt(pageInput) * perPage
-    }`
-    console.log(sql)
+    sql += `ORDER BY surat_keterangans.id DESC LIMIT ${perPage} OFFSET ${parseInt(pageInput) * perPage
+      }`
     const surat_keterangans = await Database.rawQuery(sql)
     const current_page = parseInt(pageInput) + 1
     const last_page = Math.ceil(total.rowCount / perPage)

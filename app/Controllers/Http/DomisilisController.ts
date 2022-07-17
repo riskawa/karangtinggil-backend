@@ -16,18 +16,17 @@ export default class DomisilisController {
 
     let sql = `SELECT domisilis.*, pemohons.nik, pemohons.nama FROM domisilis
       JOIN pemohons on domisilis.pemohon_nik = pemohons.nik
-      WHERE 'nama' like '%${search}%' `
+      WHERE nama like '%${search}%' `
     sql +=
       filterType == 1
         ? `AND date(domisilis.created_at) = '${filter}' `
         : filterType == 2
-        ? `AND extract(month from domisilis.created_at) = ${filter} `
-        : filterType == 3
-        ? `AND extract(year from domisilis.created_at) = ${filter} `
-        : ''
+          ? `AND extract(month from domisilis.created_at) = ${filter} `
+          : filterType == 3
+            ? `AND extract(year from domisilis.created_at) = ${filter} `
+            : ''
     const total = await Database.rawQuery(sql)
     sql += `ORDER BY domisilis.id DESC LIMIT ${perPage} OFFSET ${parseInt(pageInput) * perPage}`
-    console.log(sql)
     const domisilis = await Database.rawQuery(sql)
     const current_page = parseInt(pageInput) + 1
     const last_page = Math.ceil(total.rowCount / perPage)

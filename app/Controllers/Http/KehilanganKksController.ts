@@ -15,20 +15,18 @@ export default class KehilanganKksController {
 
     let sql = `SELECT kehilangan_kks.*, pemohons.nik, pemohons.nama FROM kehilangan_kks
       JOIN pemohons on kehilangan_kks.pemohon_nik = pemohons.nik
-      WHERE 'nama' like '%${search}%' `
+      WHERE nama like '%${search}%' `
     sql +=
       filterType == 1
         ? `AND date(kehilangan_kks.created_at) = '${filter}' `
         : filterType == 2
-        ? `AND extract(month from kehilangan_kks.created_at) = ${filter} `
-        : filterType == 3
-        ? `AND extract(year from kehilangan_kks.created_at) = ${filter} `
-        : ''
+          ? `AND extract(month from kehilangan_kks.created_at) = ${filter} `
+          : filterType == 3
+            ? `AND extract(year from kehilangan_kks.created_at) = ${filter} `
+            : ''
     const total = await Database.rawQuery(sql)
-    sql += `ORDER BY kehilangan_kks.id DESC LIMIT ${perPage} OFFSET ${
-      parseInt(pageInput) * perPage
-    }`
-    console.log(sql)
+    sql += `ORDER BY kehilangan_kks.id DESC LIMIT ${perPage} OFFSET ${parseInt(pageInput) * perPage
+      }`
     const kehilangan_kks = await Database.rawQuery(sql)
     const current_page = parseInt(pageInput) + 1
     const last_page = Math.ceil(total.rowCount / perPage)

@@ -16,15 +16,15 @@ export default class SktmsController {
 
     let sql = `SELECT sktms.*, pemohons.nik, pemohons.nama FROM sktms
       JOIN pemohons on sktms.pemohon_nik = pemohons.nik
-      WHERE 'nama' like '%${search}%' `
+      WHERE nama like '%${search}%' `
     sql +=
       filterType == 1
         ? `AND date(sktms.created_at) = '${filter}' `
         : filterType == 2
-        ? `AND extract(month from sktms.created_at) = ${filter} `
-        : filterType == 3
-        ? `AND extract(year from sktms.created_at) = ${filter} `
-        : ''
+          ? `AND extract(month from sktms.created_at) = ${filter} `
+          : filterType == 3
+            ? `AND extract(year from sktms.created_at) = ${filter} `
+            : ''
     const total = await Database.rawQuery(sql)
     sql += `ORDER BY sktms.id DESC LIMIT ${perPage} OFFSET ${parseInt(pageInput) * perPage}`
     console.log(sql)
