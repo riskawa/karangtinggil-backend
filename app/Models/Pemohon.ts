@@ -1,82 +1,248 @@
-import { DateTime } from 'luxon'
-import { BaseModel, column, hasMany, HasMany } from '@ioc:Adonis/Lucid/Orm'
-import Sktm from 'App/Models/Sktm'
-import Sku from './Sku'
-import Skck from './Skck'
-import Domisili from './Domisili'
-import KehilanganKk from './KehilanganKk'
-import SuratKeterangan from './SuratKeterangan'
+import type { HttpContextContract } from '@ioc:Adonis/Core/HttpContext'
+import { schema, rules } from '@ioc:Adonis/Core/Validator'
+import fs from 'fs'
+import Drive from '@ioc:Adonis/Core/Drive'
+import Env from '@ioc:Adonis/Core/Env'
+import Pemohon from 'App/Models/Pemohon'
+import Application from '@ioc:Adonis/Core/Application'
+import User from 'App/Models/User'
+import Database from '@ioc:Adonis/Lucid/Database'
 
-export default class Pemohon extends BaseModel {
-  @column({ isPrimary: true })
-  public id: number
+export default class PemohonsController {
+  public async index({ request, response }: HttpContextContract) {
+    const perPage = request.input('limit', 5)
+    const pageInput = request.input('page', 0)
+    const search = request.input('search')
+    const filterType = request.input('filterType')
+    const filter = request.input('filter')
 
-  @column()
-  public user_id: number
+    let sql = `SELECT * FROM pemohons WHERE (nama like '%${search}%' OR nik like '%${search}%') `
+    sql +=
+      filterType == 1
+        ? `AND date(tanggal_lahir) = '${filter}' `
+        : filterType == 2
+          ? `AND extract(month from tanggal_lahir) = ${filter} `
+          : filterType == 3
+            ? `AND extract(year from tanggal_lahir) = ${filter} `
+            : filterType == 4
+              ? `AND date(created_at) = '${filter}' `
+              : ''
+    const total = await Database.rawQuery(sql)
+    sql += `ORDER BY id ASC LIMIT ${perPage} OFFSET ${parseInt(pageInput) * perPage}`
 
-  @column()
-  public nama: string
+    const pemohons = await Database.rawQuery(sql)
+    const current_page = parseInt(pageInput) + 1
+    const last_page = Math.ceil(total.rowCount / perPage)
 
-  @column()
-  public tempat_lahir: string
+    return response.json({
+      meta: {
+        total: total.rowCount,
+        per_page: parseInt(perPage),
+        current_page: current_page,
+        last_page: last_page,
+        first_page: 1,
+        first_page_url: '/?page=1',
+        last_page_url: `/?page=${last_page}`,
+        next_page_url: `/?page=${current_page + 1}`,
+        previous_page_url: current_page == 1 ? null : `/?page=${current_page - 1}`,
+      },
+      data: pemohons.rows,
+    })
+  }
 
-  @column.dateTime({
-    serialize: (value: DateTime | null) => {
-      return value ? value.toFormat('yyyy-LL-dd') : value
-    },
-  })
-  public tanggal_lahir: DateTime
+  public async getAll() {
+    return await Pemohon.all()
+  }
 
-  @column()
-  public jenis_kelamin: string
+  public async store({ request, response }: HttpContextContract) {
+    const pemohonSchema = schema.create({
+      nik: schema.string({}, [rules.unique({ table: 'pemohons', column: 'nik' })]),
+      tempat_lahir: schema.string(),
+      tanggal_lahir: schema.date(),
+      jenis_kelamin: schema.string(),
+      kewarganegaraan: schema.string(),
+      agama: schema.string(),
+      pekerjaan: schema.string(),
+      telpon: schema.string(),
+      nama: schema.string(),
+      alamat: schema.string(),
+      kk: schema.file({ size: '2mb' }),
+    })
 
-  @column()
-  public kewarganegaraan: string
+    const userSchema = schema.create({
+      username: schema.string({}, [rules.unique({ table: 'users', column: 'username' })]),
+    })
 
-  @column()
-  public nik: string
+    const userValidated = await request.validate({
+      schema: userSchema,
+      messages: {
+        'username.unique': 'Username sudah terdaftar',
+      },
+    })
 
-  @column()
-  public agama: string
+    const dataValidated = await request.validate({
+      schema: pemohonSchema,
+      messages: {
+        'nik.unique': 'NIK sudah terdaftar',
+      },
+    })
 
-  @column()
-  public pekerjaan: string
+    const kk = request.file('kk')
 
-  @column()
-  public telpon: string
+    const name = kk?.clientName
+    const ext = name?.split('.')[1]
+    const ts = new Date().valueOf()
+    const fileName = ts + '.' + ext
 
-  @column()
-  public alamat: string
+    const userData = {
+      username: userValidated.username,
+      password: 'pemohon',
+      level: 4,
+      nama: dataValidated.nama,
+    }
 
-  @column()
-  public kk: string
+    fs.mkdirSync(Application.publicPath('/uploads'), { recursive: true })
+    await kk?.moveToDisk(Application.publicPath('/uploads'), { name: fileName })
+    if (kk?.state == 'moved') {
+      console.log('upload berhasil')
+    } else {
+      console.log(kk?.errors)
+    }
+    try {
+      const user = await User.create(userData)
 
-  @column.dateTime({
-    autoCreate: true,
-    serialize: (value: DateTime | null) => {
-      return value ? value.toFormat('yyyy-LL-dd') : value
-    },
-  })
-  public createdAt: DateTime
+      const data = {
+        nik: dataValidated.nik,
+        tempat_lahir: dataValidated.tempat_lahir,
+        tanggal_lahir: dataValidated.tanggal_lahir,
+        jenis_kelamin: dataValidated.jenis_kelamin,
+        kewarganegaraan: dataValidated.kewarganegaraan,
+        agama: dataValidated.agama,
+        pekerjaan: dataValidated.pekerjaan,
+        telpon: dataValidated.telpon,
+        alamat: dataValidated.alamat,
+        nama: dataValidated.nama,
+        kk: fileName,
+        user_id: user.id,
+      }
 
-  @column.dateTime({ autoCreate: true, autoUpdate: true })
-  public updatedAt: DateTime
+      await Pemohon.create(data)
+      return response.created()
+    } catch (error) {
+      return response.badRequest(error)
+    }
+  }
 
-  @hasMany(() => Sktm)
-  public sktm: HasMany<typeof Sktm>
+  public async show({ params }: HttpContextContract) {
+    const data = await Pemohon.findBy('nik', params.nik)
+    const fileUrl = await Drive.getUrl('' + data?.kk)
+    const url = Env.get('APP_URL') + fileUrl
+    const pemohon = {
+      pemohon: data,
+      kk_link: url,
+    }
+    return pemohon
+  }
 
-  @hasMany(() => Sku)
-  public sku: HasMany<typeof Sku>
+  public async update({ params, request, response }: HttpContextContract) {
+    const pemohon = await Pemohon.findByOrFail('nik', params.nik)
+    const userSchema = schema.create({
+      nama: schema.string(),
+      jenis_kelamin: schema.string.optional(),
+      tempat_lahir: schema.string.optional(),
+      tanggal_lahir: schema.date.optional(),
+      agama: schema.string.optional(),
+      kewarganegaraan: schema.string.optional(),
+      alamat: schema.string.optional(),
+      telpon: schema.string.optional(),
+      pekerjaan: schema.string.optional(),
+    })
 
-  @hasMany(() => Skck)
-  public skck: HasMany<typeof Skck>
+    const data = await request.validate({ schema: userSchema })
+    try {
+      pemohon.nama = data.nama
+      pemohon.jenis_kelamin = data.jenis_kelamin!
+      pemohon.tempat_lahir = data.tempat_lahir!
+      pemohon.tanggal_lahir = data.tanggal_lahir!
+      pemohon.agama = data.agama!
+      pemohon.kewarganegaraan = data.kewarganegaraan!
+      pemohon.alamat = data.alamat!
+      pemohon.telpon = data.telpon!
+      pemohon.pekerjaan = data.pekerjaan!
 
-  @hasMany(() => Domisili)
-  public domisili: HasMany<typeof Domisili>
+      await pemohon.save()
 
-  @hasMany(() => KehilanganKk)
-  public kehilangan_kk: HasMany<typeof KehilanganKk>
+      return response.status(200)
+    } catch (error) {
+      return response.badRequest(error)
+    }
+  }
 
-  @hasMany(() => SuratKeterangan)
-  public surat_keterangan: HasMany<typeof SuratKeterangan>
+  public async destroy({ params, response }: HttpContextContract) {
+    const pemohon = await Pemohon.findByOrFail('nik', params.nik)
+    try {
+      if (pemohon.kk != null) await Drive.delete(pemohon.kk)
+      await pemohon.delete()
+      return response.status(200)
+    } catch (error) {
+      return response.badRequest(error)
+    }
+  }
+
+  public async showById({ params }) {
+    const data = await Pemohon.findBy('user_id', params.id)
+    const fileUrl = await Drive.getUrl('' + data?.kk)
+    const url = Env.get('APP_URL') + fileUrl
+    const pemohon = {
+      pemohon: data,
+      kk_link: url,
+    }
+    return pemohon
+  }
+
+  public async uploadKK({ request, response }: HttpContextContract) {
+    const pemohon = await Pemohon.findByOrFail('nik', request.input('nik'))
+    const kk = request.file('file_kk')
+
+    const name = kk?.clientName
+    const ext = name?.split('.')[1]
+    const ts = new Date().valueOf()
+    const fileName = ts + '.' + ext
+
+    try {
+      try {
+        fs.mkdirSync(Application.publicPath('/uploads'), { recursive: true })
+        await kk?.moveToDisk(Application.publicPath('/uploads'), { name: fileName })
+      } catch (error) {
+        console.log(error)
+      }
+
+      pemohon.kk = fileName
+      await pemohon.save()
+
+      return response.status(200)
+    } catch (e) {
+      return response.badRequest(e)
+    }
+  }
+
+  public async getSurat({ params }: HttpContextContract) {
+    const surat = await Database.rawQuery(
+      `select created_at,status, 'SKTM' as jenis_surat from sktms where pemohon_nik = '${params.nik}'
+      union
+      select created_at , status, 'SKCK' as jenis_surat from skcks where pemohon_nik = '${params.nik}'
+      union
+      select created_at, status, 'DOMISILI' as jenis_surat from domisilis where pemohon_nik = '${params.nik}'
+      union
+      select created_at, status, 'KEHILANGAN KK'as jenis_surat from kehilangan_kks where pemohon_nik = '${params.nik}'
+      union 
+      select created_at, status, 'SKU' as jenis_surat from skus where pemohon_nik = '${params.nik}'
+      union 
+      select created_at, status, 'SURAT KETERANGAN' as jenis_surat from surat_keterangans where pemohon_nik = '${params.nik}'
+      ORDER BY created_at DESC
+      `
+    )
+
+    return surat.rows
+  }
 }

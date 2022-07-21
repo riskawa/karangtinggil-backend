@@ -36,6 +36,7 @@ Route.get('/check', async () => {
 }).middleware(['auth', 'checkRole'])
 
 Route.group(() => {
+  Route.post('/users/password/', 'UsersController.password')
   Route.resource('pemohon', 'PemohonsController').except(['update', 'show', 'destroy']).apiOnly()
   Route.get('/pemohon/all', 'PemohonsController.getAll')
   Route.get('/pemohon/:nik', 'PemohonsController.show')

@@ -1,43 +1,110 @@
-import { DateTime } from 'luxon'
+import type { HttpContextContract } from '@ioc:Adonis/Core/HttpContext'
+import { schema, rules } from '@ioc:Adonis/Core/Validator'
+import Pemohon from 'App/Models/Pemohon'
+import User from 'App/Models/User'
 import Hash from '@ioc:Adonis/Core/Hash'
-import { column, beforeSave, BaseModel, hasOne, HasOne } from '@ioc:Adonis/Lucid/Orm'
-import Pemohon from './Pemohon'
 
-export default class User extends BaseModel {
-  @column({ isPrimary: true })
-  public id: number
+export default class UsersController {
+  public async register({ request, auth, response }: HttpContextContract) {
+    console.log(request.input('username'))
+    const userSchema = schema.create({
+      username: schema.string({}, [
+        rules.unique({ table: 'users', column: 'username' })
+      ]),
+      password: schema.string({}, [rules.minLength(8)]),
+      nama: schema.string({}, [rules.required()]),
+      level: schema.number(),
+    })
 
-  @column()
-  public username: string
+    const data = await request.validate({ schema: userSchema })
 
-  @column({ serializeAs: null })
-  public password: string
+    try {
+      const user = await User.create(data)
 
-  @column()
-  public rememberMeToken?: string
+      const pemohonSchema = schema.create({
+        nik: schema.string({ trim: true }, [rules.unique({ table: 'pemohons', column: 'nik' })]),
+        nama: schema.string(),
+        user_id: schema.number(),
+      })
 
-  @column()
-  public level: number
+      const pemohonData = await request.validate({
+        schema: pemohonSchema,
+        data: {
+          nik: request.input('nik'),
+          nama: request.input('nama'),
+          user_id: user.id,
+        },
+      })
+      await Pemohon.create(pemohonData)
 
-  @column()
-  public nama: string
+      const token = await auth.login(user)
 
-  @column()
-  public keterangan: string
-
-  @column.dateTime({ autoCreate: true })
-  public createdAt: DateTime
-
-  @column.dateTime({ autoCreate: true, autoUpdate: true })
-  public updatedAt: DateTime
-
-  @beforeSave()
-  public static async hashPassword(user: User) {
-    if (user.$dirty.password) {
-      user.password = await Hash.make(user.password)
+      return token
+    } catch (error) {
+      console.log(error)
+      return response.badRequest(error)
     }
   }
 
-  @hasOne(() => Pemohon)
-  public sktm: HasOne<typeof Pemohon>
+  public async login({ request, auth, response }) {
+    const username = request.input('username')
+    const password = request.input('password')
+
+    try {
+      const token = await auth.attempt(username, password)
+
+      return response.json({
+        status: 'success',
+        data: token,
+      })
+    } catch (error) {
+      response.status(400).json({
+        status: 'error',
+        message: 'Invalid username/password.',
+      })
+    }
+  }
+
+  public async me({ auth, response }) {
+    return response.json({
+      status: 'success',
+      data: auth.user,
+    })
+  }
+
+  public async logout({ auth, response }) {
+    try {
+      auth.logout()
+      return response.status(200)
+    } catch (err) {
+      return response.status(400).json({
+        status: 'error',
+        message: err,
+      })
+    }
+  }
+
+  public async check({ auth }) {
+    await auth.use('api').check()
+    return auth.use('api').isLoggedIn
+  }
+
+
+  public async password({ request, auth, response }: HttpContextContract) {
+    const password_verified = await Hash.verify(auth.user!.password, request.input('password_lama'))
+    if (!password_verified) {
+      return response.badRequest({ 'message': 'Password lama salah' })
+    }
+
+    const user = await User.find(auth.user?.id)
+    try {
+      user!.password = request.input('password_baru')
+      await user?.save()
+      console.log('sukses')
+      return response.status(200)
+    } catch (e) {
+      console.log('gagal')
+      return response.badRequest(e)
+    }
+  }
 }

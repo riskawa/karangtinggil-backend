@@ -14,6 +14,8 @@ export default class SktmsController {
     const filterType = request.input('filterType')
     const filter = request.input('filter')
 
+    console.log(filter)
+
     let sql = `SELECT sktms.*, pemohons.nik, pemohons.nama FROM sktms
       JOIN pemohons on sktms.pemohon_nik = pemohons.nik
       WHERE nama like '%${search}%' `
@@ -24,10 +26,11 @@ export default class SktmsController {
           ? `AND extract(month from sktms.created_at) = ${filter} `
           : filterType == 3
             ? `AND extract(year from sktms.created_at) = ${filter} `
-            : ''
+            : filterType == 4
+              ? `AND date(sktms.created_at) >= '${filter[0]}' AND date(sktms.created_at) <= '${filter[1]}' `
+              : ''
     const total = await Database.rawQuery(sql)
     sql += `ORDER BY sktms.id DESC LIMIT ${perPage} OFFSET ${parseInt(pageInput) * perPage}`
-    console.log(sql)
     const sktms = await Database.rawQuery(sql)
     const current_page = parseInt(pageInput) + 1
     const last_page = Math.ceil(total.rowCount / perPage)
